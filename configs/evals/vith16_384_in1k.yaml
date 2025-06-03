@@ -4,14 +4,14 @@ tag: in1k-16f
 eval_name: image_classification_frozen
 resume_checkpoint: false
 data:
-  root_path: /your_absolute_file_path_to_directory_where_image_datasets_are_stored/
-  image_folder: imagenet_full_size/061417/
-  num_classes: 1000
+  root_path: /home/guglielmo/Projects/datasets/drawing-agent-test/
+  image_folder: mnist/
+  num_classes: 10
   resolution: 384
-  dataset_name: ImageNet
+  dataset_name: MNIST
 optimization:
   num_epochs: 20
-  batch_size: 16
+  batch_size: 32
   weight_decay: 0.001
   lr: 0.001
   start_lr: 0.001
@@ -19,7 +19,7 @@ optimization:
   warmup: 0.
   use_bfloat16: true
 pretrain:
-  model_name: vit_huge
+  model_name: vit_tiny
   checkpoint_key: target_encoder
   clip_duration: null
   frames_per_clip: 16
@@ -29,6 +29,6 @@ pretrain:
   use_silu: false
   tight_silu: false
   patch_size: 16
-  folder: /your_absolute_file_path_to_directory_where_pretrained_models_are_contained/
+  folder: /home/guglielmo/Projects/jepa/logs/
   checkpoint: jepa-latest.pth.tar  # name of pretrained model file inside folder
   write_tag: jepa

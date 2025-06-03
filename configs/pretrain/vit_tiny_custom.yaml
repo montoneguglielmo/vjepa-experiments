@@ -4,15 +4,15 @@ tasks_per_node: 1
 data:
   dataset_type: VideoDataset
   datasets:
-    - configs/pretrain/drawing_agent_index.csv
+    - ../datasets/drawing-agent-test/videos/videos_index.csv
   decode_one_clip: true
   batch_size: 4  # Reduced batch size for small GPU
   num_clips: 1
   num_frames: 16
   tubelet_size: 2
   sampling_rate: 4
-  crop_size: 224
-  patch_size: 16
+  crop_size: 56
+  patch_size: 4
   pin_mem: true
   num_workers: 4  # Reduced workers for single GPU
   filter_short_videos: false

@@ -47,7 +47,8 @@ def init_data(
 
     if (data.lower() == 'imagenet') \
             or (data.lower() == 'inat21') \
-            or (data.lower() == 'places205'):
+            or (data.lower() == 'places205') \
+            or (data.lower() == 'mnist'):
         from src.datasets.image_dataset import make_imagedataset
         dataset, data_loader, dist_sampler = make_imagedataset(
             transform=transform,

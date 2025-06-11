@@ -7,7 +7,7 @@ data:
   root_path: /home/guglielmo/Projects/datasets/drawing-agent-test/
   image_folder: mnist/
   num_classes: 10
-  resolution: 384
+  resolution: 56
   dataset_name: MNIST
 optimization:
   num_epochs: 20

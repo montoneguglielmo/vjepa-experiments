@@ -393,7 +393,6 @@ def main(args, resume_preempt=False):
                 # Put each clip on the GPU and concatenate along batch
                 # dimension
                 clips = torch.cat([u.to(device, non_blocking=True) for u in udata[0]], dim=0)
-
                 # Put each mask-enc/mask-pred pair on the GPU and reuse the
                 # same mask pair for each clip
                 _masks_enc, _masks_pred = [], []

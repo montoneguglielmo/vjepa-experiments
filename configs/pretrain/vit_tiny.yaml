@@ -4,7 +4,7 @@ tasks_per_node: 1
 data:
   dataset_type: VideoDataset
   datasets:
-    - ../datasets/drawing-agent-800/videos/videos_index.csv
+    - ../datasets/drawing-agent-3200/videos/videos_index.csv
   decode_one_clip: true
   batch_size: 4  # Reduced batch size for small GPU
   num_clips: 1
@@ -28,7 +28,7 @@ data_aug:
   - 1.0
   reprob: 0.0
 logging:
-  folder: /home/guglielmo/Projects/jepa-experiments/800videos/run2
+  folder: /home/guglielmo/Projects/jepa-experiments/3200videos/run1
   write_tag: jepa_tiny
 loss:
   loss_exp: 1.0

@@ -1,22 +1,22 @@
 nodes: 8
 tasks_per_node: 8
-tag: in1k-16f
+tag: mnist
 eval_name: image_classification_frozen
 resume_checkpoint: false
 data:
-  root_path: /home/guglielmo/Projects/datasets/drawing-agent-test/
+  root_path: /home/guglielmo/Projects/datasets/drawing-agent-800/
   image_folder: mnist/
   num_classes: 10
   resolution: 56
   dataset_name: MNIST
 optimization:
-  num_epochs: 20
+  num_epochs: 60
   batch_size: 32
   weight_decay: 0.001
   lr: 0.001
   start_lr: 0.001
-  final_lr: 0.0
-  warmup: 0.
+  final_lr: 0.0001
+  warmup: 0.05
   use_bfloat16: true
 pretrain:
   model_name: vit_tiny
@@ -29,6 +29,6 @@ pretrain:
   use_silu: false
   tight_silu: false
   patch_size: 16
-  folder: /home/guglielmo/Projects/jepa/logs/
-  checkpoint: jepa-latest.pth.tar  # name of pretrained model file inside folder
+  folder: /home/guglielmo/Projects/jepa-experiments/800videos/run2
+  checkpoint: jepa_tiny-latest.pth.tar  # name of pretrained model file inside folder
   write_tag: jepa

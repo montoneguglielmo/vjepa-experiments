@@ -270,3 +270,133 @@ class VideoDataset(torch.utils.data.Dataset):
 
     def __len__(self):
         return len(self.samples)
+
+if __name__ == '__main__':
+    import sys
+    import os
+    
+    # Add the project root to Python path so we can import src modules
+    project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+    sys.path.insert(0, project_root)
+    
+    import yaml
+    
+    # Load the config file
+    config_path = 'configs/pretrain/vit_tiny.yaml'
+    with open(config_path, 'r') as y_file:
+        config = yaml.load(y_file, Loader=yaml.FullLoader)
+    
+    print("Loaded config:")
+    print(f"Dataset paths: {config['data']['datasets']}")
+    print(f"Batch size: {config['data']['batch_size']}")
+    print(f"Num frames: {config['data']['num_frames']}")
+    print(f"Num clips: {config['data']['num_clips']}")
+    print(f"Sampling rate: {config['data']['sampling_rate']}")
+    
+    # Extract parameters from config
+    data_config = config['data']
+    model_config = config['model']
+    
+    # Import mask collator
+    from src.masks.multiblock3d import MaskCollator as MB3DMaskCollator
+    from src.masks.random_tube import MaskCollator as TubeMaskCollator
+    
+    # Create mask collator based on config
+    mask_type = model_config.get('mask_type', 'multiblock3d')
+    cfgs_mask = [{'aspect_ratio': [0.75, 1.5], 'num_blocks': 8, 'spatial_scale': [0.15, 0.15], 'temporal_scale': [1.0, 1.0], 'max_temporal_keep': 1.0, 'max_keep': None}, {'aspect_ratio': [0.75, 1.5], 'num_blocks': 2, 'spatial_scale': [0.7, 0.7], 'temporal_scale': [1.0, 1.0], 'max_temporal_keep': 1.0, 'max_keep': None}, {'mode': 'time_split'}]
+
+    if mask_type == 'multiblock3d':
+        print('Initializing basic multi-block mask')
+        mask_collator = MB3DMaskCollator(
+            crop_size=model_config.get('crop_size', 224),
+            num_frames=data_config['num_frames'],
+            patch_size=model_config.get('patch_size', 16),
+            tubelet_size=model_config.get('tubelet_size', 2),
+            cfgs_mask=cfgs_mask)
+    else:
+        print('Initializing random tube mask')
+        mask_collator = TubeMaskCollator(
+            crop_size=model_config.get('crop_size', 224),
+            num_frames=data_config['num_frames'],
+            patch_size=model_config.get('patch_size', 16),
+            tubelet_size=model_config.get('tubelet_size', 2),
+            cfgs_mask=cfgs_mask)
+    
+    print('mask_collator', type(mask_collator))
+    
+    # Run the make_videodataset function
+    try:
+        dataset, data_loader, dist_sampler = make_videodataset(
+            data_paths=data_config['datasets'],
+            batch_size=data_config['batch_size'],
+            frames_per_clip=data_config['num_frames'],
+            frame_step=data_config['sampling_rate'],
+            num_clips=data_config['num_clips'],
+            random_clip_sampling=True,
+            allow_clip_overlap=False,
+            filter_short_videos=data_config.get('filter_short_videos', False),
+            filter_long_videos=int(10**9),
+            transform=None,
+            shared_transform=None,
+            rank=0,
+            world_size=1,
+            datasets_weights=None,
+            collator=mask_collator,
+            drop_last=True,
+            num_workers=data_config.get('num_workers', 4),
+            pin_mem=data_config.get('pin_mem', True),
+            duration=data_config.get('clip_duration', None),
+            log_dir=None,
+        )
+        
+        print(f"\nSuccessfully created dataset!")
+        print(f"Dataset length: {len(dataset)}")
+        print(f"DataLoader length: {len(data_loader)}")
+        
+        # Test loading a batch
+        print("\nTesting data loading...")
+        loader = iter(data_loader)
+        
+        # Explore the content of the loader - match training script format
+        print('=== DEBUG: Printing loader content ===')
+        try:
+            # Get first few items from loader to inspect structure
+            for i in range(3):  # Print first 3 items
+                try:
+                    item = next(loader)
+                    print(f'Loader item {i}:')
+                    print(f'  Type: {type(item)}')
+                    print(f'  Length: {len(item)}')
+                    if len(item) >= 3:
+                        udata, masks_enc, masks_pred = item
+                        print(f'  udata type: {type(udata)}')
+                        print(f'  udata length: {len(udata)}')
+                        if len(udata) > 0:
+                            print(f'  udata[0] type: {type(udata[0])}')
+                            print(f'  udata[0] length: {len(udata[0])}')
+                            if len(udata[0]) > 0:
+                                print(f'  udata[0][0] type: {type(udata[0][0])}')
+                                print(f'  udata[0][0] shape: {udata[0][0].shape}')
+                        print(f'  masks_enc type: {type(masks_enc)}')
+                        print(f'  masks_enc length: {len(masks_enc)}')
+                        for i, m in enumerate(masks_enc):
+                            print(f'  masks_enc[{i}] type: {type(m)}')
+                            print(f'  masks_enc[{i}] shape: {m.shape}')
+                        print(f'  masks_pred type: {type(masks_pred)}')
+                        print(f'  masks_pred length: {len(masks_pred)}')
+                        for i, m in enumerate(masks_pred):
+                            print(f'  masks_pred[{i}] type: {type(m)}')
+                            print(f'  masks_pred[{i}] shape: {m.shape}')
+                    print('  ---')
+                except StopIteration:
+                    print(f'Loader exhausted after {i} items')
+                    break
+        except Exception as e:
+            print(f'Error inspecting loader: {e}')
+        
+        print('=== END DEBUG ===')
+            
+    except Exception as e:
+        print(f"Error creating dataset: {e}")
+        import traceback
+        traceback.print_exc()

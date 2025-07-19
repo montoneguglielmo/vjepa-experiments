@@ -28,7 +28,7 @@ data_aug:
   - 1.0
   reprob: 0.0
 logging:
-  folder: /home/guglielmo/Projects/jepa-experiments/3200videos/run1
+  folder: /home/guglielmo/Projects/jepa-experiments/trash
   write_tag: jepa_tiny
 loss:
   loss_exp: 1.0
@@ -58,6 +58,7 @@ mask:
       - 1.0
     max_temporal_keep: 1.0
     max_keep: null
+  - mode: time_split
 meta:
   load_checkpoint: false
   read_checkpoint: null

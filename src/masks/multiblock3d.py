@@ -42,6 +42,7 @@ class MaskCollator(object):
                 npred=m.get('num_blocks'),
                 max_context_frames_ratio=m.get('max_temporal_keep', 1.0),
                 max_keep=m.get('max_keep', None),
+                mode=m.get('mode', 'block'),
             )
             self.mask_generators.append(mask_generator)
 
@@ -77,6 +78,7 @@ class _MaskGenerator(object):
         npred=1,
         max_context_frames_ratio=1.0,
         max_keep=None,
+        mode='block',
     ):
         super(_MaskGenerator, self).__init__()
         if not isinstance(crop_size, tuple):
@@ -95,7 +97,7 @@ class _MaskGenerator(object):
         self.max_context_duration = max(1, int(self.duration * max_context_frames_ratio))  # maximum number of time-steps (frames) spanned by context mask
         self.max_keep = max_keep  # maximum number of patches to keep in context
         self._itr_counter = Value('i', -1)  # collator is shared across worker processes
-
+        self.mode = mode
     def step(self):
         i = self._itr_counter
         with i.get_lock():
@@ -152,7 +154,7 @@ class _MaskGenerator(object):
         # --
         return mask
 
-    def __call__(self, batch_size):
+    def _generate_block_masks(self, batch_size):
         """
         Create encoder and predictor masks when collating imgs into a batch
         # 1. sample pred block size using seed
@@ -201,3 +203,37 @@ class _MaskGenerator(object):
         collated_masks_enc = torch.utils.data.default_collate(collated_masks_enc)
 
         return collated_masks_enc, collated_masks_pred
+    
+    def _generate_time_split_masks(self, batch_size):
+        collated_masks_pred, collated_masks_enc = [], []
+
+        t = torch.randint(0, self.duration - 1, (1,)).item()  # pick t in [0, duration-2]
+        for _ in range(batch_size):
+            # Encoder mask covers from t onwards
+            enc_mask = torch.zeros((self.duration, self.height, self.width), dtype=torch.int32)
+            enc_mask[t:, :, :] = 1
+            enc_mask = enc_mask.flatten()
+            enc_mask = torch.nonzero(enc_mask).squeeze()
+
+            # Predictor mask is only frame t+1
+            pred_mask = torch.zeros((self.duration, self.height, self.width), dtype=torch.int32)
+            pred_mask[t+1, :, :] = 1
+            pred_mask = pred_mask.flatten()
+            pred_mask = torch.nonzero(pred_mask).squeeze()
+
+            collated_masks_pred.append(pred_mask)
+            collated_masks_enc.append(enc_mask)
+
+        # Collate and return
+        collated_masks_pred = torch.utils.data.default_collate(collated_masks_pred)
+        collated_masks_enc = torch.utils.data.default_collate(collated_masks_enc)
+
+        return collated_masks_enc, collated_masks_pred    
+
+    def __call__(self, batch_size):
+        if self.mode == 'block':
+            return self._generate_block_masks(batch_size)
+        elif self.mode == 'time_split':
+            return self._generate_time_split_masks(batch_size)
+        else:
+            raise ValueError(f'Invalid mode: {self.mode}')

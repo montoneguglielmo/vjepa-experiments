@@ -87,7 +87,6 @@ class VisionTransformerPredictor(nn.Module):
         self.predictor_pos_embed = nn.Parameter(
             torch.zeros(1, num_patches, predictor_embed_dim),
             requires_grad=False)
-
         # Attention Blocks
         self.predictor_blocks = nn.ModuleList([
             Block(
@@ -215,7 +214,6 @@ class VisionTransformerPredictor(nn.Module):
             pos_embs = apply_masks(pos_embs, masks_tgt)
             pos_embs = repeat_interleave_batch(pos_embs, B, repeat=len(masks_ctxt))
             pred_tokens += pos_embs
-
         # Concatenate context & target tokens
         x = x.repeat(len(masks_tgt), 1, 1)
         x = torch.cat([x, pred_tokens], dim=1)
@@ -226,7 +224,6 @@ class VisionTransformerPredictor(nn.Module):
         masks_ctxt = torch.cat(masks_ctxt, dim=0)
         masks_tgt = torch.cat(masks_tgt, dim=0)
         masks = torch.cat([masks_ctxt, masks_tgt], dim=1)
-
         # Fwd prop
         for blk in self.predictor_blocks:
             x = blk(x, mask=masks)

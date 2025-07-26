@@ -292,9 +292,18 @@ def main(args, resume_preempt=False):
         mixed_precision=mixed_precision,
         betas=betas,
         eps=eps)
-    encoder = DistributedDataParallel(encoder, static_graph=True)
-    predictor = DistributedDataParallel(predictor, static_graph=True)
-    target_encoder = DistributedDataParallel(target_encoder)
+    #encoder = DistributedDataParallel(encoder, static_graph=True)
+    #predictor = DistributedDataParallel(predictor, static_graph=True)
+    #target_encoder = DistributedDataParallel(target_encoder)
+    # 🛠 PATCH THIS BLOCK:
+    if torch.distributed.is_available() and torch.distributed.is_initialized():
+        encoder = DistributedDataParallel(encoder, static_graph=True)
+        predictor = DistributedDataParallel(predictor, static_graph=True)
+        target_encoder = DistributedDataParallel(target_encoder)
+    else:
+        logger.info("Running without DistributedDataParallel")
+    
+    
     for p in target_encoder.parameters():
         p.requires_grad = False
 

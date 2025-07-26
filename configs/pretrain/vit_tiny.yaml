@@ -4,7 +4,7 @@ tasks_per_node: 1
 data:
   dataset_type: VideoDataset
   datasets:
-    - ../datasets/drawing-agent-3200/videos/videos_index.csv
+    - ../datasets/action-drawing-agent/videos_with_action/videos/videos_index.csv
   decode_one_clip: true
   batch_size: 4  # Reduced batch size for small GPU
   num_clips: 1
@@ -28,7 +28,7 @@ data_aug:
   - 1.0
   reprob: 0.0
 logging:
-  folder: /home/guglielmo/Projects/jepa-experiments/trash
+  folder: /home/guglielmo/Projects/experiments_result/action-drawing-agent/400-videos
   write_tag: jepa_tiny
 loss:
   loss_exp: 1.0
@@ -41,18 +41,6 @@ mask:
     spatial_scale:
       - 0.15
       - 0.15
-    temporal_scale:
-      - 1.0
-      - 1.0
-    max_temporal_keep: 1.0
-    max_keep: null
-  - aspect_ratio:
-      - 0.75
-      - 1.5
-    num_blocks: 2
-    spatial_scale:
-      - 0.7
-      - 0.7
     temporal_scale:
       - 1.0
       - 1.0

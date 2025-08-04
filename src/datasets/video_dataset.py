@@ -377,6 +377,14 @@ if __name__ == '__main__':
                             if len(udata[0]) > 0:
                                 print(f'  udata[0][0] type: {type(udata[0][0])}')
                                 print(f'  udata[0][0] shape: {udata[0][0].shape}')
+                                # Add min/max value prints
+                                if hasattr(udata[0][0], 'min') and hasattr(udata[0][0], 'max'):
+                                    print(f'  udata[0][0] min: {udata[0][0].min().item():.4f}')
+                                    print(f'  udata[0][0] max: {udata[0][0].max().item():.4f}')
+                                # Check all clips in the batch
+                                for clip_idx in range(len(udata[0])):
+                                    if hasattr(udata[0][clip_idx], 'min') and hasattr(udata[0][clip_idx], 'max'):
+                                        print(f'  udata[0][{clip_idx}] min: {udata[0][clip_idx].min().item():.4f}, max: {udata[0][clip_idx].max().item():.4f}')
                         print(f'  masks_enc type: {type(masks_enc)}')
                         print(f'  masks_enc length: {len(masks_enc)}')
                         for i, m in enumerate(masks_enc):

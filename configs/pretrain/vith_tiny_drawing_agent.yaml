@@ -4,7 +4,7 @@ tasks_per_node: 1
 data:
   dataset_type: VideoDataset
   datasets:
-    - ../datasets/action-drawing-agent/videos_with_action/videos/videos_index.csv
+    - ../datasets/action-drawing-agent/videos_no_action/800-videos/videos/videos_index.csv
   decode_one_clip: true
   batch_size: 4  # Reduced batch size for small GPU
   num_clips: 1
@@ -17,18 +17,8 @@ data:
   num_workers: 4  # Reduced workers for single GPU
   filter_short_videos: false
   clip_duration: null
-data_aug:
-  auto_augment: false
-  motion_shift: false
-  random_resize_aspect_ratio:
-  - 0.75
-  - 1.35
-  random_resize_scale:
-  - 0.3
-  - 1.0
-  reprob: 0.0
 logging:
-  folder: /home/guglielmo/Projects/experiments_result/action-drawing-agent/400-videos
+  folder: /home/guglielmo/tmp
   write_tag: jepa_tiny
 loss:
   loss_exp: 1.0
@@ -68,7 +58,7 @@ optimization:
   weight_decay: 0.04
   final_weight_decay: 0.4
   epochs: 100  # Reduced number of epochs
-  warmup: 10  # Reduced warmup
+  warmup: 20  # Reduced warmup
   start_lr: 0.0002
   lr: 0.0004
   final_lr: 1.0e-06

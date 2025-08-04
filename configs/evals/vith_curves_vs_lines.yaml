@@ -9,6 +9,7 @@ data:
   num_classes: 2
   resolution: 56
   dataset_name: CURVE_LINES
+  normalize_only: true
 optimization:
   num_epochs: 60
   batch_size: 32

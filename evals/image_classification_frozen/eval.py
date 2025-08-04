@@ -90,7 +90,7 @@ def main(args_eval, resume_preempt=False):
     root_path = args_data.get('root_path', None)
     image_folder = args_data.get('image_folder', None)
     resolution = args_data.get('resolution', 224)
-
+    normalize_only = args_data.get('normalize_only', False)
     # -- OPTIMIZATION
     args_opt = args_eval.get('optimization')
     batch_size = args_opt.get('batch_size')
@@ -198,7 +198,10 @@ def main(args_eval, resume_preempt=False):
         warmup=warmup,
         num_epochs=num_epochs,
         use_bfloat16=use_bfloat16)
-    classifier = DistributedDataParallel(classifier, static_graph=True)
+    if torch.distributed.is_available() and torch.distributed.is_initialized():
+        classifier = DistributedDataParallel(classifier, static_graph=True)
+    else:
+        logger.info("Running without DistributedDataParallel")
 
     # -- load training checkpoint
     start_epoch = 0
@@ -284,6 +287,10 @@ def run_one_epoch(
         with torch.cuda.amp.autocast(dtype=torch.float16, enabled=use_bfloat16):
 
             imgs, labels = data[0].to(device), data[1].to(device)
+            
+            # Print max and min pixel values
+            print(f"Image pixel range - Min: {imgs.min().item():.4f}, Max: {imgs.max().item():.4f}")
+            print(f"Image shape: {imgs.shape}")
             with torch.no_grad():
                 outputs = encoder(imgs)
                 if not training:
@@ -385,11 +392,14 @@ def make_dataloader(
     rank,
     resolution=224,
     training=False,
-    subset_file=None
+    subset_file=None,
+    normalize_only=False
 ):
     normalization = ((0.485, 0.456, 0.406),
                      (0.229, 0.224, 0.225))
-    if training:
+    if normalize_only:
+        transform = transforms.Normalize(normalization[0], normalization[1])]
+    elif training:
         logger.info('implementing auto-agument strategy')
         transform = timm_make_transforms(
             input_size=resolution,

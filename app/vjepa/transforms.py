@@ -37,6 +37,19 @@ def make_transforms(
     return _frames_augmentation
 
 
+class VideoNormalizeOnlyTransform(object):
+    def __init__(self, normalize=((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))):
+        self.mean = torch.tensor(normalize[0], dtype=torch.float32)
+        self.std = torch.tensor(normalize[1], dtype=torch.float32)
+        self.mean *= 255.  # assuming input is still in 0-255 range
+        self.std *= 255.
+
+    def __call__(self, buffer):
+        buffer = torch.tensor(buffer, dtype=torch.float32)
+        buffer = buffer.permute(3, 0, 1, 2)  # T H W C -> C T H W
+        return _tensor_normalize_inplace(buffer, self.mean, self.std)
+
+
 class VideoTransform(object):
 
     def __init__(

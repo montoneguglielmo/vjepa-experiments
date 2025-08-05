@@ -45,7 +45,7 @@ from app.vjepa.utils import (
     init_video_model,
     init_opt,
 )
-from app.vjepa.transforms import make_transforms
+from app.vjepa.transforms import make_transforms, VideoNormalizeOnlyTransform
 
 
 # --
@@ -124,11 +124,16 @@ def main(args, resume_preempt=False):
 
     # -- DATA AUGS
     cfgs_data_aug = args.get('data_aug')
-    ar_range = cfgs_data_aug.get('random_resize_aspect_ratio', [3/4, 4/3])
-    rr_scale = cfgs_data_aug.get('random_resize_scale', [0.3, 1.0])
-    motion_shift = cfgs_data_aug.get('motion_shift', False)
-    reprob = cfgs_data_aug.get('reprob', 0.)
-    use_aa = cfgs_data_aug.get('auto_augment', False)
+    if cfgs_data_aug is None:
+        logger.info('No data augmentation section found — using normalization only.')
+        data_aug = False
+    else:
+        data_aug = True
+        ar_range = cfgs_data_aug.get('random_resize_aspect_ratio', [3/4, 4/3])
+        rr_scale = cfgs_data_aug.get('random_resize_scale', [0.3, 1.0])
+        motion_shift = cfgs_data_aug.get('motion_shift', False)
+        reprob = cfgs_data_aug.get('reprob', 0.)
+        use_aa = cfgs_data_aug.get('auto_augment', False)
 
     # -- LOSS
     cfgs_loss = args.get('loss')
@@ -238,14 +243,20 @@ def main(args, resume_preempt=False):
             patch_size=patch_size,
             tubelet_size=tubelet_size,
             cfgs_mask=cfgs_mask)
-    transform = make_transforms(
-        random_horizontal_flip=True,
-        random_resize_aspect_ratio=ar_range,
-        random_resize_scale=rr_scale,
-        reprob=reprob,
-        auto_augment=use_aa,
+        
+    if data_aug:
+        transform = make_transforms(
+            random_horizontal_flip=True,
+            random_resize_aspect_ratio=ar_range,
+            random_resize_scale=rr_scale,
+            reprob=reprob,
+            auto_augment=use_aa,
         motion_shift=motion_shift,
-        crop_size=crop_size)
+            crop_size=crop_size)
+    else:
+        transform = VideoNormalizeOnlyTransform(
+            normalize=((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))
+        )
 
     # -- init data-loaders/samplers
     (unsupervised_loader,
@@ -390,6 +401,14 @@ def main(args, resume_preempt=False):
 
             try:
                 udata, masks_enc, masks_pred = next(loader)
+                
+                # Print max and min values of video data
+                print(f"Video data (udata) pixel range - Min: {udata[0][0].min().item():.4f}, Max: {udata[0][0].max().item():.4f}")
+                print(f"Video data (udata) shape: {udata[0][0].shape}")
+                # Print values for all clips in the batch
+                for clip_idx in range(len(udata[0])):
+                    print(f"Clip {clip_idx} - Min: {udata[0][clip_idx].min().item():.4f}, Max: {udata[0][clip_idx].max().item():.4f}")
+                
             except Exception:
                 logger.info('Exhausted data loaders. Refreshing...')
                 loader = iter(unsupervised_loader)
@@ -415,6 +434,10 @@ def main(args, resume_preempt=False):
 
                 return (clips, _masks_enc, _masks_pred)
             clips, masks_enc, masks_pred = load_clips()
+
+            # Print values after processing and normalization
+            print(f"Processed clips - Min: {clips.min().item():.4f}, Max: {clips.max().item():.4f}")
+            print(f"Processed clips shape: {clips.shape}")
 
             for _i, m in enumerate(mask_meters):
                 m.update(masks_enc[_i][0].size(-1))

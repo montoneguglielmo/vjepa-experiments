@@ -174,7 +174,8 @@ def main(args_eval, resume_preempt=False):
         batch_size=batch_size,
         world_size=world_size,
         rank=rank,
-        training=True)
+        training=True,
+        normalize_only=normalize_only)
     val_loader = make_dataloader(
         dataset_name=dataset_name,
         root_path=root_path,
@@ -183,7 +184,8 @@ def main(args_eval, resume_preempt=False):
         batch_size=batch_size,
         world_size=world_size,
         rank=rank,
-        training=False)
+        training=False,
+        normalize_only=normalize_only)
     ipe = len(train_loader)
     logger.info(f'Dataloader created... iterations per epoch: {ipe}')
 
@@ -289,8 +291,9 @@ def run_one_epoch(
             imgs, labels = data[0].to(device), data[1].to(device)
             
             # Print max and min pixel values
-            print(f"Image pixel range - Min: {imgs.min().item():.4f}, Max: {imgs.max().item():.4f}")
-            print(f"Image shape: {imgs.shape}")
+            phase = "TRAINING" if training else "VALIDATION"
+            print(f"[{phase}] Image pixel range - Min: {imgs.min().item():.4f}, Max: {imgs.max().item():.4f}")
+            print(f"[{phase}] Image shape: {imgs.shape}")
             with torch.no_grad():
                 outputs = encoder(imgs)
                 if not training:
@@ -397,8 +400,12 @@ def make_dataloader(
 ):
     normalization = ((0.485, 0.456, 0.406),
                      (0.229, 0.224, 0.225))
+    
     if normalize_only:
-        transform = transforms.Normalize(normalization[0], normalization[1])]
+        transform = transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Normalize(normalization[0], normalization[1])
+        ])
     elif training:
         logger.info('implementing auto-agument strategy')
         transform = timm_make_transforms(

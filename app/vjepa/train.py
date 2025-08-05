@@ -255,7 +255,7 @@ def main(args, resume_preempt=False):
             crop_size=crop_size)
     else:
         transform = VideoNormalizeOnlyTransform(
-            normalize=((0.5, 0.5, 0.5), (0.3, 0.3, 0.3))
+            normalize=((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))
         )
 
     # -- init data-loaders/samplers

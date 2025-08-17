@@ -46,7 +46,6 @@ mask:
       - 1.0
     max_temporal_keep: 1.0
     max_keep: null
-  - mode: time_split
 meta:
   load_checkpoint: false
   read_checkpoint: null

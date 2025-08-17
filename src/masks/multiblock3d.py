@@ -49,15 +49,23 @@ class MaskCollator(object):
     def step(self):
         for mask_generator in self.mask_generators:
             mask_generator.step()
-
+            
     def __call__(self, batch):
-
-        batch_size = len(batch)
+        print('BATCH INSIDE MASK COLLATOR')
+        print("Batch type:", type(batch))
+        print("Batch length:", len(batch))
+        for b in batch:
+            print(type(b))
+            for t in b[0]:
+                print(t.shape)
+            print('This is the second element of the batch:', b[1])
+            print('This is the third element of the batch:', b[2])
+                  
         collated_batch = torch.utils.data.default_collate(batch)
 
         collated_masks_pred, collated_masks_enc = [], []
-        for i, mask_generator in enumerate(self.mask_generators):
-            masks_enc, masks_pred = mask_generator(batch_size)
+        for mask_generator in self.mask_generators:
+            masks_enc, masks_pred = mask_generator(collated_batch)
             collated_masks_enc.append(masks_enc)
             collated_masks_pred.append(masks_pred)
 
@@ -204,36 +212,62 @@ class _MaskGenerator(object):
 
         return collated_masks_enc, collated_masks_pred
     
-    def _generate_time_split_masks(self, batch_size):
+    def _generate_time_split_masks(self, batch):
+        """
+        batch: tensor or list of shape [B, T, H, W]
+        """
+        print("Generating time split masks 2")
         collated_masks_pred, collated_masks_enc = [], []
+        print("Batch length:", len(batch))
+        for b in batch:
+            print(type(b))
 
-        t = torch.randint(0, self.duration - 1, (1,)).item()  # pick t in [0, duration-2]
-        for _ in range(batch_size):
-            # Encoder mask covers from t onwards
-            enc_mask = torch.zeros((self.duration, self.height, self.width), dtype=torch.int32)
-            enc_mask[t:, :, :] = 1
-            enc_mask = enc_mask.flatten()
-            enc_mask = torch.nonzero(enc_mask).squeeze()
+        # Convert batch to tensor if it is a list
+        if not torch.is_tensor(batch):
+            batch = torch.utils.data.default_collate(batch)  # shape [B, T, H, W]
 
-            # Predictor mask is only frame t+1
-            pred_mask = torch.zeros((self.duration, self.height, self.width), dtype=torch.int32)
-            pred_mask[t+1, :, :] = 1
+        
+        B, T, H, W = batch.shape
+        ph, pw, pt = 4, 4, 2  # patch sizes
+        n_h, n_w, n_t = H // ph, W // pw, T // pt
+
+        # Random frame for predictor mask
+        t_pred = torch.randint(0, T-1, (1,)).item()
+
+        for b in range(B):
+            # Predictor mask: only frame t_pred+1
+            pred_mask = torch.zeros((T, H, W), dtype=torch.int32)
+            pred_mask[t_pred+1, :, :] = 1
             pred_mask = pred_mask.flatten()
             pred_mask = torch.nonzero(pred_mask).squeeze()
-
             collated_masks_pred.append(pred_mask)
+
+            # Encoder mask: mask patches that are fully black
+            enc_mask = torch.zeros((T, H, W), dtype=torch.int32)
+            for t_patch in range(n_t):
+                for h_patch in range(n_h):
+                    for w_patch in range(n_w):
+                        # Define patch boundaries
+                        t_start, t_end = t_patch*pt, (t_patch+1)*pt
+                        h_start, h_end = h_patch*ph, (h_patch+1)*ph
+                        w_start, w_end = w_patch*pw, (w_patch+1)*pw
+
+                        patch = batch[b, t_start:t_end, h_start:h_end, w_start:w_end]
+                        if patch.sum() == 0:  # fully black patch
+                            enc_mask[t_start:t_end, h_start:h_end, w_start:w_end] = 1
+
+            enc_mask = enc_mask.flatten()
+            enc_mask = torch.nonzero(enc_mask).squeeze()
             collated_masks_enc.append(enc_mask)
 
         # Collate and return
         collated_masks_pred = torch.utils.data.default_collate(collated_masks_pred)
         collated_masks_enc = torch.utils.data.default_collate(collated_masks_enc)
 
-        return collated_masks_enc, collated_masks_pred    
+        return collated_masks_enc, collated_masks_pred
 
-    def __call__(self, batch_size):
+    def __call__(self, data):
         if self.mode == 'block':
-            return self._generate_block_masks(batch_size)
+            return self._generate_block_masks(len(data) if not torch.is_tensor(data) else data.shape[0])
         elif self.mode == 'time_split':
-            return self._generate_time_split_masks(batch_size)
-        else:
-            raise ValueError(f'Invalid mode: {self.mode}')
+            return self._generate_time_split_masks(data)

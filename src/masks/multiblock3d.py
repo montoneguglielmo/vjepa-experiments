@@ -51,16 +51,30 @@ class MaskCollator(object):
             mask_generator.step()
 
     def __call__(self, batch):
-
-        batch_size = len(batch)
+        print('Inside MaskCollator')
+        print(f"Batch length: {len(batch)}")
+        print(f"Batch first element first element type: {type(batch[0][0])}")
+        print(f"Batch first element first element len: {len(batch[0][0])}")
+         
         collated_batch = torch.utils.data.default_collate(batch)
-
+        print(f"Collated batch type: {type(collated_batch)}")
+        print(f"Collated batch length: {len(collated_batch)}")
+        print(f"Collated batch type: {type(collated_batch[0])}")
+        print(f"Collated batch length: {len(collated_batch[0])}")
+        print(f"Collated batch type: {type(collated_batch[0][0])}")
+        
         collated_masks_pred, collated_masks_enc = [], []
         for i, mask_generator in enumerate(self.mask_generators):
-            masks_enc, masks_pred = mask_generator(batch_size)
+            masks_enc, masks_pred = mask_generator(collated_batch[0][0])
             collated_masks_enc.append(masks_enc)
             collated_masks_pred.append(masks_pred)
-
+        
+ 
+        print(f"Collated masks enc type: {collated_masks_enc[0].shape}")
+        print(f"Collated masks enc len: {len(collated_masks_enc)}")
+        print(f"Collated masks pred shape: {collated_masks_pred[0].shape}")
+        print(f"Collated masks pred shape: {collated_masks_pred[1].shape}")
+        print(f"Collated masks pred len: {len(collated_masks_pred)}")
         return collated_batch, collated_masks_enc, collated_masks_pred
 
 
@@ -204,36 +218,72 @@ class _MaskGenerator(object):
 
         return collated_masks_enc, collated_masks_pred
     
-    def _generate_time_split_masks(self, batch_size):
+    def _generate_time_split_masks(self, video_batch):
+        """
+        video_batch: Tensor of shape (B, T, H, W) or (B, T, H, W, C)
+        Returns:
+            enc_mask: (B, N_enc) indices of encoder-visible patches
+            pred_mask: (B, N_pred) indices of predictor-visible patches
+        where masks are in patch space: (n_t, n_h, n_w)
+        """
+        B, T = video_batch.shape[0], video_batch.shape[1]
+        
+        # Make sure spatial_patch_size is a tuple
+        if isinstance(self.spatial_patch_size, int):
+            ph, pw = self.spatial_patch_size, self.spatial_patch_size
+        else:
+            ph, pw = self.spatial_patch_size
+        pt = self.temporal_patch_size      # temporal patch size
+
+        n_h, n_w = self.height, self.width   # patches per frame
+        n_t = self.duration                  # temporal patches
+
+        # What counts as "black"?
+        black_value = video_batch.min().item()
+
         collated_masks_pred, collated_masks_enc = [], []
 
-        t = torch.randint(0, self.duration - 1, (1,)).item()  # pick t in [0, duration-2]
-        for _ in range(batch_size):
-            # Encoder mask covers from t onwards
-            enc_mask = torch.zeros((self.duration, self.height, self.width), dtype=torch.int32)
-            enc_mask[t:, :, :] = 1
-            enc_mask = enc_mask.flatten()
-            enc_mask = torch.nonzero(enc_mask).squeeze()
+        # Random temporal *patch* index for prediction
+        t_patch = torch.randint(0, n_t - 1, (1,)).item()
 
-            # Predictor mask is only frame t+1
-            pred_mask = torch.zeros((self.duration, self.height, self.width), dtype=torch.int32)
-            pred_mask[t+1, :, :] = 1
-            pred_mask = pred_mask.flatten()
-            pred_mask = torch.nonzero(pred_mask).squeeze()
+        for b in range(B):
+            # encoder mask in patch space
+            enc_mask = torch.zeros((n_t, n_h, n_w), dtype=torch.int32)
 
-            collated_masks_pred.append(pred_mask)
+            # go through all temporal patches up to t_patch
+            for tt in range(t_patch + 1):  # inclusive
+                t_start, t_end = tt * pt, (tt + 1) * pt
+                for hh in range(n_h):
+                    for ww in range(n_w):
+                        h_start, h_end = hh * ph, (hh + 1) * ph
+                        w_start, w_end = ww * pw, (ww + 1) * pw
+
+                        patch = video_batch[b, t_start:t_end, h_start:h_end, w_start:w_end]
+                        if not torch.all(patch == black_value):
+                            enc_mask[tt, hh, ww] = 1
+
+            # predictor mask: only the *next* temporal patch
+            pred_mask = torch.zeros((n_t, n_h, n_w), dtype=torch.int32)
+            pred_mask[t_patch + 1, :, :] = 1  # predict entire patch at t_patch+1
+
+            # flatten to indices
+            enc_mask = torch.nonzero(enc_mask.flatten()).squeeze()
+            pred_mask = torch.nonzero(pred_mask.flatten()).squeeze()
+
             collated_masks_enc.append(enc_mask)
+            collated_masks_pred.append(pred_mask)
 
-        # Collate and return
+        # Collate across batch
         collated_masks_pred = torch.utils.data.default_collate(collated_masks_pred)
         collated_masks_enc = torch.utils.data.default_collate(collated_masks_enc)
 
-        return collated_masks_enc, collated_masks_pred    
+        return collated_masks_enc, collated_masks_pred
 
-    def __call__(self, batch_size):
+    def __call__(self, batch):
+        batch_size = len(batch)
         if self.mode == 'block':
             return self._generate_block_masks(batch_size)
         elif self.mode == 'time_split':
-            return self._generate_time_split_masks(batch_size)
+            return self._generate_time_split_masks(batch)
         else:
             raise ValueError(f'Invalid mode: {self.mode}')

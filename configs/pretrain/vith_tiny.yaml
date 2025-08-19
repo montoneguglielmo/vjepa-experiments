@@ -4,7 +4,11 @@ tasks_per_node: 1
 data:
   dataset_type: VideoDataset
   datasets:
+<<<<<<< HEAD:configs/pretrain/vith_tiny.yaml
     - ../datasets/action-drawing-agent/videos_no_action/800-videos/videos/videos_index.csv
+=======
+    - ../datasets/action-drawing-agent/videos_with_action/800-videos/videos/videos_index.csv
+>>>>>>> single_gpu:configs/pretrain/vit_tiny.yaml
   decode_one_clip: true
   batch_size: 4  # Reduced batch size for small GPU
   num_clips: 1

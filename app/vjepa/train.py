@@ -395,20 +395,14 @@ def main(args, resume_preempt=False):
         mask_meters = [AverageMeter() for _ in range(len(cfgs_mask))]
         gpu_time_meter = AverageMeter()
         wall_time_meter = AverageMeter()
+        target_var_mean_meter = AverageMeter()
+        target_var_min_meter = AverageMeter()
 
         for itr in range(ipe):
             itr_start_time = time.time()
 
             try:
                 udata, masks_enc, masks_pred = next(loader)
-                
-                # Print max and min values of video data
-                print(f"Video data (udata) pixel range - Min: {udata[0][0].min().item():.4f}, Max: {udata[0][0].max().item():.4f}")
-                print(f"Video data (udata) shape: {udata[0][0].shape}")
-                # Print values for all clips in the batch
-                for clip_idx in range(len(udata[0])):
-                    print(f"Clip {clip_idx} - Min: {udata[0][clip_idx].min().item():.4f}, Max: {udata[0][clip_idx].max().item():.4f}")
-                
             except Exception:
                 logger.info('Exhausted data loaders. Refreshing...')
                 loader = iter(unsupervised_loader)
@@ -434,10 +428,6 @@ def main(args, resume_preempt=False):
 
                 return (clips, _masks_enc, _masks_pred)
             clips, masks_enc, masks_pred = load_clips()
-
-            # Print values after processing and normalization
-            print(f"Processed clips - Min: {clips.min().item():.4f}, Max: {clips.max().item():.4f}")
-            print(f"Processed clips shape: {clips.shape}")
 
             for _i, m in enumerate(mask_meters):
                 m.update(masks_enc[_i][0].size(-1))
@@ -483,6 +473,12 @@ def main(args, resume_preempt=False):
                 loss_jepa, loss_reg = 0., 0.
                 with torch.cuda.amp.autocast(dtype=dtype, enabled=mixed_precision):
                     h = forward_target(clips)
+                    # compute variance of teacher embeddings ---
+                    h_flat = h[0].view(-1, h[0].size(-1))
+                    feature_var = h_flat.var(dim=0)   # shape [D]
+                    target_var_mean = float(feature_var.mean())   # mean variance across batch
+                    target_var_min = float(feature_var.min())     # min variance across batch
+                    
                     z = forward_context(clips, h)
                     loss_jepa = loss_fn(z, h)  # jepa prediction loss
                     pstd_z = reg_fn(z)  # predictor variance across patches
@@ -526,8 +522,10 @@ def main(args, resume_preempt=False):
                     grad_stats,
                     grad_stats_pred,
                     optim_stats,
+                    target_var_mean,
+                    target_var_min,
                 )
-            (loss, loss_jepa, loss_reg, _new_lr, _new_wd, grad_stats, grad_stats_pred, optim_stats,), gpu_etime_ms = gpu_timer(train_step)
+            (loss, loss_jepa, loss_reg, _new_lr, _new_wd, grad_stats, grad_stats_pred, optim_stats, target_var_mean, target_var_min), gpu_etime_ms = gpu_timer(train_step)
             iter_elapsed_time_ms = (time.time() - itr_start_time) * 1000.
             loss_meter.update(loss)
             input_var = float(AllReduce.apply(clips.view(clips.shape[0], -1).var(dim=1).mean(dim=0)))
@@ -538,6 +536,8 @@ def main(args, resume_preempt=False):
             reg_loss_meter.update(loss_reg)
             gpu_time_meter.update(gpu_etime_ms)
             wall_time_meter.update(iter_elapsed_time_ms)
+            target_var_mean_meter.update(target_var_mean)
+            target_var_min_meter.update(target_var_min)
 
             # -- Logging
             def log_stats():
@@ -550,7 +550,9 @@ def main(args, resume_preempt=False):
                     grad_stats.global_norm,
                     grad_stats_pred.global_norm,
                     gpu_etime_ms,
-                    iter_elapsed_time_ms)
+                    iter_elapsed_time_ms,
+                    target_var_mean,
+                    target_var_min)
                 if (itr % log_freq == 0) or np.isnan(loss) or np.isinf(loss):
                     logger.info(
                         '[%d, %5d] loss: %.3f | p%.3f r%.3f | '
@@ -560,6 +562,8 @@ def main(args, resume_preempt=False):
                         '[mem: %.2e] '
                         '[gpu: %.1f ms]'
                         '[wall: %.1f ms]'
+                        '[target_var_mean: %.3f]'
+                        '[target_var_min: %.3f]'
                         % (epoch + 1, itr,
                            loss_meter.avg,
                            jepa_loss_meter.avg,
@@ -571,7 +575,9 @@ def main(args, resume_preempt=False):
                            _new_lr,
                            torch.cuda.max_memory_allocated() / 1024.0**2,
                            gpu_time_meter.avg,
-                           wall_time_meter.avg))
+                           wall_time_meter.avg,
+                           target_var_mean_meter.avg,
+                           target_var_min_meter.avg))
 
                     if optim_stats is not None:
                         logger.info(

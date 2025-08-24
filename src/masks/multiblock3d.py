@@ -51,30 +51,13 @@ class MaskCollator(object):
             mask_generator.step()
             
     def __call__(self, batch):
-        print('Inside MaskCollator')
-        print(f"Batch length: {len(batch)}")
-        print(f"Batch first element first element type: {type(batch[0][0])}")
-        print(f"Batch first element first element len: {len(batch[0][0])}")
-         
         collated_batch = torch.utils.data.default_collate(batch)
-        print(f"Collated batch type: {type(collated_batch)}")
-        print(f"Collated batch length: {len(collated_batch)}")
-        print(f"Collated batch type: {type(collated_batch[0])}")
-        print(f"Collated batch length: {len(collated_batch[0])}")
-        print(f"Collated batch type: {type(collated_batch[0][0])}")
         
         collated_masks_pred, collated_masks_enc = [], []
         for i, mask_generator in enumerate(self.mask_generators):
             masks_enc, masks_pred = mask_generator(collated_batch[0][0])
             collated_masks_enc.append(masks_enc)
             collated_masks_pred.append(masks_pred)
-        
- 
-        print(f"Collated masks enc type: {collated_masks_enc[0].shape}")
-        print(f"Collated masks enc len: {len(collated_masks_enc)}")
-        print(f"Collated masks pred shape: {collated_masks_pred[0].shape}")
-        print(f"Collated masks pred shape: {collated_masks_pred[1].shape}")
-        print(f"Collated masks pred len: {len(collated_masks_pred)}")
         return collated_batch, collated_masks_enc, collated_masks_pred
 
 
@@ -242,9 +225,6 @@ class _MaskGenerator(object):
         black_value = video_batch.min().item()
 
         collated_masks_pred, collated_masks_enc = [], []
-        print("Batch length:", len(batch))
-        for b in batch:
-            print(type(b))
 
         # Random temporal *patch* index for prediction
         t_patch = torch.randint(0, n_t - 1, (1,)).item()

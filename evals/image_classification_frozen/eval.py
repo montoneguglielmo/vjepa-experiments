@@ -292,8 +292,6 @@ def run_one_epoch(
             
             # Print max and min pixel values
             phase = "TRAINING" if training else "VALIDATION"
-            print(f"[{phase}] Image pixel range - Min: {imgs.min().item():.4f}, Max: {imgs.max().item():.4f}")
-            print(f"[{phase}] Image shape: {imgs.shape}")
             with torch.no_grad():
                 outputs = encoder(imgs)
                 if not training:
@@ -379,7 +377,6 @@ def load_pretrained(
             logger.info(f'key "{k}" is of different shape in model and loaded state dict')
             pretrained_dict[k] = v
     msg = encoder.load_state_dict(pretrained_dict, strict=False)
-    print(encoder)
     logger.info(f'loaded pretrained model with msg: {msg}')
     logger.info(f'loaded pretrained encoder from epoch: {checkpoint["epoch"]}\n path: {pretrained}')
     del checkpoint

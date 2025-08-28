@@ -206,6 +206,11 @@ def main(args, resume_preempt=False):
         ('%.5f', 'pred-grad-norm'),
         ('%d', 'gpu-time(ms)'),
         ('%d', 'wall-time(ms)'),
+        ('%.5f', 'target_var_mean'),
+        ('%.5f', 'target_var_min'),
+        ('%.5f', 'input_var'),
+        ('%.5f', 'input_var_min'),
+        ('%.5f', 'momentum'),
     )
 
     # -- init model
@@ -303,6 +308,15 @@ def main(args, resume_preempt=False):
         mixed_precision=mixed_precision,
         betas=betas,
         eps=eps)
+    target_ids = {id(p) for p in target_encoder.parameters()}
+    found = False
+    for gi, group in enumerate(optimizer.param_groups):
+        for p in group['params']:
+            if id(p) in target_ids:
+                print(f"⚠️  target_encoder param found in optimizer group {gi}")
+                found = True
+    assert not found, "Target encoder is inside the optimizer (should not be)!"
+    
     #encoder = DistributedDataParallel(encoder, static_graph=True)
     #predictor = DistributedDataParallel(predictor, static_graph=True)
     #target_encoder = DistributedDataParallel(target_encoder)
@@ -321,6 +335,23 @@ def main(args, resume_preempt=False):
     # -- momentum schedule
     momentum_scheduler = (ema[0] + i*(ema[1]-ema[0])/(ipe*num_epochs*ipe_scale)
                           for i in range(int(ipe*num_epochs*ipe_scale)+1))
+    
+    
+    #     # 1) Print ema[0] and ema[1]
+    # print(f"[DEBUG] ema[0] = {ema[0]:.6f}, ema[1] = {ema[1]:.6f}")
+
+    # # 2) Print the first 3 elements of the momentum scheduler
+    # momentum_scheduler = (
+    #     ema[0] + i * (ema[1] - ema[0]) / (ipe * num_epochs * ipe_scale)
+    #     for i in range(int(ipe * num_epochs * ipe_scale) + 1)
+    # )
+
+    # # Convert the generator to a list to peek at the first 3 values
+    # momentum_values = []
+    # for _ in range(3):
+    #     momentum_values.append(next(momentum_scheduler))
+
+    # print(f"[DEBUG] first 3 momentum values: {momentum_values}")
 
     start_epoch = 0
     # -- load training checkpoint
@@ -397,6 +428,7 @@ def main(args, resume_preempt=False):
         wall_time_meter = AverageMeter()
         target_var_mean_meter = AverageMeter()
         target_var_min_meter = AverageMeter()
+        momentum = []
 
         for itr in range(ipe):
             itr_start_time = time.time()
@@ -509,9 +541,22 @@ def main(args, resume_preempt=False):
 
                 # Step 3. momentum update of target encoder
                 m = next(momentum_scheduler)
+                
+                # if itr < 3 and epoch == start_epoch:  # avoid spam
+                #     print(f"[DEBUG] EMA m = {m:.12f}")
+                    
                 with torch.no_grad():
                     for param_q, param_k in zip(encoder.parameters(), target_encoder.parameters()):
                         param_k.data.mul_(m).add_((1.-m) * param_q.detach().data)
+
+                # Debug: check only a few representative parameters of the target encoder
+                # watch_list = [
+                #     "module.backbone.blocks.6.attn.qkv.weight",
+                #     ]
+
+                # for name, param in target_encoder.named_parameters():
+                #     if name in watch_list:
+                #         print(f"[DEBUG] {name}: requires_grad={param.requires_grad}, norm={param.data.norm().item()}")
 
                 return (
                     float(loss),
@@ -524,8 +569,9 @@ def main(args, resume_preempt=False):
                     optim_stats,
                     target_var_mean,
                     target_var_min,
+                    m,
                 )
-            (loss, loss_jepa, loss_reg, _new_lr, _new_wd, grad_stats, grad_stats_pred, optim_stats, target_var_mean, target_var_min), gpu_etime_ms = gpu_timer(train_step)
+            (loss, loss_jepa, loss_reg, _new_lr, _new_wd, grad_stats, grad_stats_pred, optim_stats, target_var_mean, target_var_min, m), gpu_etime_ms = gpu_timer(train_step)
             iter_elapsed_time_ms = (time.time() - itr_start_time) * 1000.
             loss_meter.update(loss)
             input_var = float(AllReduce.apply(clips.view(clips.shape[0], -1).var(dim=1).mean(dim=0)))
@@ -538,6 +584,7 @@ def main(args, resume_preempt=False):
             wall_time_meter.update(iter_elapsed_time_ms)
             target_var_mean_meter.update(target_var_mean)
             target_var_min_meter.update(target_var_min)
+            momentum.append(m)
 
             # -- Logging
             def log_stats():
@@ -552,7 +599,10 @@ def main(args, resume_preempt=False):
                     gpu_etime_ms,
                     iter_elapsed_time_ms,
                     target_var_mean,
-                    target_var_min)
+                    target_var_min,
+                    input_var,
+                    input_var_min,
+                    momentum[-1])
                 if (itr % log_freq == 0) or np.isnan(loss) or np.isinf(loss):
                     logger.info(
                         '[%d, %5d] loss: %.3f | p%.3f r%.3f | '
@@ -564,6 +614,7 @@ def main(args, resume_preempt=False):
                         '[wall: %.1f ms]'
                         '[target_var_mean: %.3f]'
                         '[target_var_min: %.3f]'
+                        '[momentum: %.5f]'
                         % (epoch + 1, itr,
                            loss_meter.avg,
                            jepa_loss_meter.avg,
@@ -577,7 +628,8 @@ def main(args, resume_preempt=False):
                            gpu_time_meter.avg,
                            wall_time_meter.avg,
                            target_var_mean_meter.avg,
-                           target_var_min_meter.avg))
+                           target_var_min_meter.avg,
+                           m))
 
                     if optim_stats is not None:
                         logger.info(

@@ -4,7 +4,7 @@ tag: mnist
 eval_name: image_classification_frozen
 resume_checkpoint: false
 data:
-  root_path: /home/guglielmo/Projects/datasets/action-drawing-agent/videos_with_action/3200-videos/
+  root_path: /home/guglielmo/Projects/datasets/action-drawing-agent/multiple_compass/videos_with_action/3200-videos/  
   image_folder: curve_lines_dataset/
   num_classes: 2
   resolution: 56
@@ -30,6 +30,6 @@ pretrain:
   use_silu: false
   tight_silu: false
   patch_size: 4
-  folder: /home/guglielmo/Projects/experiments_result/action-drawing-agent/action_videos/3200-videos/run1/
+  folder: /home/guglielmo/Projects/experiments_result/action-drawing-agent/multiple_compass/action_videos/3200-videos/run1/
   checkpoint: jepa_tiny-latest.pth.tar  # name of pretrained model file inside folder
   write_tag: jepa

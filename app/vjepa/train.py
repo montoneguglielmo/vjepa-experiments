@@ -48,7 +48,7 @@ from app.vjepa.utils import (
 from app.vjepa.transforms import make_transforms, VideoNormalizeOnlyTransform
 
 # Import visualization function
-from app.vjepa.visualize_masks import visualize_masks
+from scripts.visualize_masks import visualize_masks
 
 
 # --
@@ -449,8 +449,9 @@ def main(args, resume_preempt=False):
 
             # Debug: print actual mask values for first sample
             debug_mode = args.get('debug', {}).get('enabled', False)
-            if debug_mode and epoch == 0 and itr == 0:
-                visualize_masks(clips[0], masks_enc[0][0], masks_pred[0][0], save_path="frame_overlays/sample.png")
+            if debug_mode and epoch == 0 and itr == 3:
+                os.makedirs("samples_with_mask", exist_ok=True)
+                visualize_masks(clips[0], masks_enc[0][0], masks_pred[0][0], save_path="samples_with_mask/sample.png")
 
             for _i, m in enumerate(mask_meters):
                 m.update(masks_enc[_i][0].size(-1))

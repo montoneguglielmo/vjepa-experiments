@@ -14,7 +14,7 @@ data:
   crop_size: 56
   patch_size: 4
   pin_mem: true
-  num_workers: 4  # Reduced workers for single GPU
+  num_workers: 0  # Reduced workers for single GPU
   filter_short_videos: false
   clip_duration: null
 logging:
@@ -32,6 +32,8 @@ meta:
   eval_freq: 100
   use_sdpa: true
   dtype: bfloat16
+debug:
+  enabled: true
 model:
   model_name: vit_tiny  # Using vit_tiny instead of vit_huge
   pred_depth: 6  # Reduced predictor depth

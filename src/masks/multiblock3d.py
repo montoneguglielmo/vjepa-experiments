@@ -252,7 +252,7 @@ class _MaskGenerator(object):
             # predictor mask: only the *next* temporal patch
             pred_mask = torch.zeros((n_t, n_h, n_w), dtype=torch.int32)
             pred_mask[t_patch + 1, :, :] = 1  # predict entire patch at t_patch+1
-            pred_mask[t_patch + 1, :2, :] = 0 # exclude the top 3 rows, which is 12 pixels
+            pred_mask[t_patch + 1, :3, :] = 0 # exclude the top 3 rows, which is 12 pixels
             
             # flatten to indices
             enc_mask = torch.nonzero(enc_mask.flatten()).squeeze()

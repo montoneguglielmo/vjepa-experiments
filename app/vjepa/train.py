@@ -47,6 +47,9 @@ from app.vjepa.utils import (
 )
 from app.vjepa.transforms import make_transforms, VideoNormalizeOnlyTransform
 
+# Import visualization function
+from app.vjepa.visualize_masks import visualize_masks
+
 
 # --
 log_timings = True
@@ -320,7 +323,7 @@ def main(args, resume_preempt=False):
     #encoder = DistributedDataParallel(encoder, static_graph=True)
     #predictor = DistributedDataParallel(predictor, static_graph=True)
     #target_encoder = DistributedDataParallel(target_encoder)
-    # 🛠 PATCH THIS BLOCK:
+    
     if torch.distributed.is_available() and torch.distributed.is_initialized():
         encoder = DistributedDataParallel(encoder, static_graph=True)
         predictor = DistributedDataParallel(predictor, static_graph=True)
@@ -335,23 +338,6 @@ def main(args, resume_preempt=False):
     # -- momentum schedule
     momentum_scheduler = (ema[0] + i*(ema[1]-ema[0])/(ipe*num_epochs*ipe_scale)
                           for i in range(int(ipe*num_epochs*ipe_scale)+1))
-    
-    
-    #     # 1) Print ema[0] and ema[1]
-    # print(f"[DEBUG] ema[0] = {ema[0]:.6f}, ema[1] = {ema[1]:.6f}")
-
-    # # 2) Print the first 3 elements of the momentum scheduler
-    # momentum_scheduler = (
-    #     ema[0] + i * (ema[1] - ema[0]) / (ipe * num_epochs * ipe_scale)
-    #     for i in range(int(ipe * num_epochs * ipe_scale) + 1)
-    # )
-
-    # # Convert the generator to a list to peek at the first 3 values
-    # momentum_values = []
-    # for _ in range(3):
-    #     momentum_values.append(next(momentum_scheduler))
-
-    # print(f"[DEBUG] first 3 momentum values: {momentum_values}")
 
     start_epoch = 0
     # -- load training checkpoint
@@ -399,17 +385,17 @@ def main(args, resume_preempt=False):
     logger.info('Initializing loader...')
     loader = iter(unsupervised_loader)
 
-    if skip_batches > 0:
-        logger.info(f'Skip {skip_batches} batches')
-        unsupervised_sampler.set_epoch(start_epoch)
-        for itr in range(skip_batches):
-            if itr % 10 == 0:
-                logger.info(f'Skip {itr}/{skip_batches} batches')
-            try:
-                udata = next(loader)
-            except Exception:
-                loader = iter(unsupervised_loader)
-                udata = next(loader)
+    # if skip_batches > 0:
+    #     logger.info(f'Skip {skip_batches} batches')
+    #     unsupervised_sampler.set_epoch(start_epoch)
+    #     for itr in range(skip_batches):
+    #         if itr % 10 == 0:
+    #             logger.info(f'Skip {itr}/{skip_batches} batches')
+    #         try:
+    #             udata = next(loader)
+    #         except Exception:
+    #             loader = iter(unsupervised_loader)
+    #             udata = next(loader)
 
     # -- TRAINING LOOP
     for epoch in range(start_epoch, num_epochs):
@@ -432,7 +418,6 @@ def main(args, resume_preempt=False):
 
         for itr in range(ipe):
             itr_start_time = time.time()
-
             try:
                 udata, masks_enc, masks_pred = next(loader)
             except Exception:
@@ -459,7 +444,13 @@ def main(args, resume_preempt=False):
                     _masks_pred.append(_mp)
 
                 return (clips, _masks_enc, _masks_pred)
+            
             clips, masks_enc, masks_pred = load_clips()
+
+            # Debug: print actual mask values for first sample
+            debug_mode = args.get('debug', {}).get('enabled', False)
+            if debug_mode and epoch == 0 and itr == 0:
+                visualize_masks(clips[0], masks_enc[0][0], masks_pred[0][0], save_path="frame_overlays/sample.png")
 
             for _i, m in enumerate(mask_meters):
                 m.update(masks_enc[_i][0].size(-1))
@@ -541,9 +532,6 @@ def main(args, resume_preempt=False):
 
                 # Step 3. momentum update of target encoder
                 m = next(momentum_scheduler)
-                
-                # if itr < 3 and epoch == start_epoch:  # avoid spam
-                #     print(f"[DEBUG] EMA m = {m:.12f}")
                     
                 with torch.no_grad():
                     for param_q, param_k in zip(encoder.parameters(), target_encoder.parameters()):

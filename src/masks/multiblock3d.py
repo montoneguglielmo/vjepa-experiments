@@ -52,7 +52,6 @@ class MaskCollator(object):
             
     def __call__(self, batch):
         collated_batch = torch.utils.data.default_collate(batch)
-        
         collated_masks_pred, collated_masks_enc = [], []
         for i, mask_generator in enumerate(self.mask_generators):
             masks_enc, masks_pred = mask_generator(collated_batch[0][0])
@@ -203,13 +202,13 @@ class _MaskGenerator(object):
     
     def _generate_time_split_masks(self, video_batch):
         """
-        video_batch: Tensor of shape (B, T, H, W) or (B, T, H, W, C)
+        video_batch: Tensor of shape (B, C, T, H, W)
         Returns:
             enc_mask: (B, N_enc) indices of encoder-visible patches
             pred_mask: (B, N_pred) indices of predictor-visible patches
         where masks are in patch space: (n_t, n_h, n_w)
         """
-        B, T = video_batch.shape[0], video_batch.shape[1]
+        B, T = video_batch.shape[0], video_batch.shape[2]
         
         # Make sure spatial_patch_size is a tuple
         if isinstance(self.spatial_patch_size, int):
@@ -221,18 +220,20 @@ class _MaskGenerator(object):
         n_h, n_w = self.height, self.width   # patches per frame
         n_t = self.duration                  # temporal patches
 
-        # What counts as "black"?
-        black_value = video_batch.min().item()
 
         collated_masks_pred, collated_masks_enc = [], []
 
         # Random temporal *patch* index for prediction
-        t_patch = torch.randint(0, n_t - 1, (1,)).item()
+        t_patch = torch.randint(3, n_t - 1, (1,)).item()
+        
+        # expected normalized black value (per channel)
+        mean = torch.tensor([0.485, 0.456, 0.406], device=video_batch.device)
+        std = torch.tensor([0.229, 0.224, 0.225], device=video_batch.device)
+        black_pixel = (-mean / std).view(3, 1, 1, 1)  # shape: (C,1,1,1)
 
         for b in range(B):
             # encoder mask in patch space
             enc_mask = torch.zeros((n_t, n_h, n_w), dtype=torch.int32)
-
             # go through all temporal patches up to t_patch
             for tt in range(t_patch + 1):  # inclusive
                 t_start, t_end = tt * pt, (tt + 1) * pt
@@ -240,15 +241,18 @@ class _MaskGenerator(object):
                     for ww in range(n_w):
                         h_start, h_end = hh * ph, (hh + 1) * ph
                         w_start, w_end = ww * pw, (ww + 1) * pw
-
-                        patch = video_batch[b, t_start:t_end, h_start:h_end, w_start:w_end]
-                        if not torch.all(patch == black_value):
+                        patch = video_batch[b, :, t_start:t_end, h_start:h_end, w_start:w_end]
+                        
+                        if torch.allclose(patch, black_pixel.expand_as(patch), atol=1e-6):
+                            # patch is all black
+                            enc_mask[tt, hh, ww] = 0
+                        else:
                             enc_mask[tt, hh, ww] = 1
 
             # predictor mask: only the *next* temporal patch
             pred_mask = torch.zeros((n_t, n_h, n_w), dtype=torch.int32)
             pred_mask[t_patch + 1, :, :] = 1  # predict entire patch at t_patch+1
-            pred_mask[t_patch + 1, :3, :] = 0 # exclude the top 4 rows
+            pred_mask[t_patch + 1, :2, :] = 0 # exclude the top 3 rows, which is 12 pixels
             
             # flatten to indices
             enc_mask = torch.nonzero(enc_mask.flatten()).squeeze()
@@ -258,9 +262,10 @@ class _MaskGenerator(object):
             collated_masks_pred.append(pred_mask)
 
         # Collate across batch
-        collated_masks_pred = torch.utils.data.default_collate(collated_masks_pred)
-        collated_masks_enc = torch.utils.data.default_collate(collated_masks_enc)
+        union_idx_enc = torch.unique(torch.cat(collated_masks_enc))
+        collated_masks_enc = union_idx_enc.unsqueeze(0).repeat(B, 1)
 
+        collated_masks_pred = torch.utils.data.default_collate(collated_masks_pred)
         return collated_masks_enc, collated_masks_pred
 
     def __call__(self, batch):

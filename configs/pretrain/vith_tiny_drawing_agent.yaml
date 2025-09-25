@@ -4,7 +4,7 @@ tasks_per_node: 1
 data:
   dataset_type: VideoDataset
   datasets:
-    - ../datasets/action-drawing-agent/multiple_compass/videos_with_action/3200-videos/videos/videos_index.csv
+    - ../shared/datasets/action-drawing-agent/one-folder-dataset/9600-videos/videos_with_action/videos_index.csv
   decode_one_clip: true
   batch_size: 4  # Reduced batch size for small GPU
   num_clips: 1
@@ -18,7 +18,7 @@ data:
   filter_short_videos: false
   clip_duration: null
 logging:
-  folder: /home/guglielmo/Projects/experiments_result/action-drawing-agent/multiple_compass/action_videos/3200-videos/run1
+  folder: ../shared/experiments_result/action-drawing-agent/one-folder-dataset/9600-videos/action_videos/run1
   write_tag: jepa_tiny
 loss:
   loss_exp: 1.0
@@ -47,7 +47,7 @@ optimization:
   clip_grad: 10.0
   weight_decay: 0.02
   final_weight_decay: 0.2
-  epochs: 150  # Reduced number of epochs
+  epochs: 2000  # Reduced number of epochs
   warmup: 30  # Reduced warmup
   start_lr: 0.0002
   lr: 0.0006

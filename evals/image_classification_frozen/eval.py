@@ -135,8 +135,9 @@ def main(args_eval, resume_preempt=False):
     if rank == 0:
         csv_logger = CSVLogger(log_file,
                                ('%d', 'epoch'),
-                               ('%.5f', 'loss'),
-                               ('%.5f', 'acc'))
+                               ('%.5f', 'train_acc'),
+                               ('%.5f', 'val_acc'),
+                               ('%.5f', 'test_acc'))
 
     # Initialize model
 
@@ -175,7 +176,8 @@ def main(args_eval, resume_preempt=False):
         world_size=world_size,
         rank=rank,
         training=True,
-        normalize_only=normalize_only)
+        normalize_only=normalize_only,
+        split='train')
     val_loader = make_dataloader(
         dataset_name=dataset_name,
         root_path=root_path,
@@ -185,7 +187,19 @@ def main(args_eval, resume_preempt=False):
         world_size=world_size,
         rank=rank,
         training=False,
-        normalize_only=normalize_only)
+        normalize_only=normalize_only,
+        split='val')
+    test_loader = make_dataloader(
+        dataset_name=dataset_name,
+        root_path=root_path,
+        resolution=resolution,
+        image_folder=image_folder,
+        batch_size=batch_size,
+        world_size=world_size,
+        rank=rank,
+        training=False,
+        normalize_only=normalize_only,
+        split='test')
     ipe = len(train_loader)
     logger.info(f'Dataloader created... iterations per epoch: {ipe}')
 
@@ -257,10 +271,22 @@ def main(args_eval, resume_preempt=False):
             wd_scheduler=wd_scheduler,
             data_loader=val_loader,
             use_bfloat16=use_bfloat16)
+        
+        test_acc = run_one_epoch(
+            device=device,
+            training=False,
+            encoder=encoder,
+            classifier=classifier,
+            scaler=scaler,
+            optimizer=optimizer,
+            scheduler=scheduler,
+            wd_scheduler=wd_scheduler,
+            data_loader=test_loader,
+            use_bfloat16=use_bfloat16)
 
-        logger.info('[%5d] train: %.3f%% test: %.3f%%' % (epoch + 1, train_acc, val_acc))
+        logger.info('[%5d] train: %.3f%% val: %.3f%% test: %.3f%%' % (epoch + 1, train_acc, val_acc, test_acc))
         if rank == 0:
-            csv_logger.log(epoch + 1, train_acc, val_acc)
+            csv_logger.log(epoch + 1, train_acc, val_acc, test_acc)
         save_checkpoint(epoch + 1)
 
 
@@ -291,7 +317,7 @@ def run_one_epoch(
             imgs, labels = data[0].to(device), data[1].to(device)
             
             # Print max and min pixel values
-            phase = "TRAINING" if training else "VALIDATION"
+            #phase = "TRAINING" if training else "VALIDATION"
             with torch.no_grad():
                 outputs = encoder(imgs)
                 if not training:
@@ -393,7 +419,8 @@ def make_dataloader(
     resolution=224,
     training=False,
     subset_file=None,
-    normalize_only=False
+    normalize_only=False,
+    split='train'
 ):
     normalization = ((0.485, 0.456, 0.406),
                      (0.229, 0.224, 0.225))
@@ -433,7 +460,9 @@ def make_dataloader(
         training=training,
         copy_data=False,
         drop_last=False,
-        subset_file=subset_file)
+        subset_file=subset_file,
+        split=split
+        )
     return data_loader
 
 

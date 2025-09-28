@@ -24,6 +24,7 @@ class ImageFolder(torchvision.datasets.ImageFolder):
         image_folder='imagenet_full_size/061417/',
         transform=None,
         train=True,
+        split='train'
     ):
         """
         ImageFolder
@@ -31,9 +32,8 @@ class ImageFolder(torchvision.datasets.ImageFolder):
         :param image_folder: path to images inside root network directory
         :param train: whether to load train data (or validation)
         """
-
-        suffix = 'train/' if train else 'val/'
-        data_path = os.path.join(root, image_folder, suffix)
+        assert split in ['train', 'val', 'test']
+        data_path = os.path.join(root, image_folder, split)
         logger.info(f'data-path {data_path}')
         super(ImageFolder, self).__init__(root=data_path, transform=transform)
         logger.info('Initialized ImageFolder')
@@ -53,13 +53,15 @@ def make_imagedataset(
     copy_data=False,
     drop_last=True,
     persistent_workers=False,
-    subset_file=None
+    subset_file=None,
+    split='train'
 ):
     dataset = ImageFolder(
         root=root_path,
         image_folder=image_folder,
         transform=transform,
-        train=training)
+        train=training,
+        split=split)
     logger.info('ImageFolder dataset created')
     dist_sampler = torch.utils.data.distributed.DistributedSampler(
         dataset=dataset,

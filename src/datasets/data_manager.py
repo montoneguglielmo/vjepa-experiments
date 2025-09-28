@@ -43,6 +43,7 @@ def init_data(
     repeat_wds=False,
     ipe=300,
     log_dir=None,
+    split='train'
 ):
 
     if (data.lower() == 'imagenet') \
@@ -65,7 +66,9 @@ def init_data(
             persistent_workers=persistent_workers,
             copy_data=copy_data,
             drop_last=drop_last,
-            subset_file=subset_file)
+            subset_file=subset_file,
+            split=split
+            )
 
     elif data.lower() == 'videodataset':
         from src.datasets.video_dataset import make_videodataset

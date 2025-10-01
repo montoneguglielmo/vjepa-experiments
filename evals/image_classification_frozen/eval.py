@@ -232,7 +232,7 @@ def main(args_eval, resume_preempt=False):
             scheduler.step()
             wd_scheduler.step()
 
-    def save_checkpoint(epoch):
+    def save_checkpoint(epoch, val_acc, test_acc):
         save_dict = {
             'classifier': classifier.state_dict(),
             'opt': optimizer.state_dict(),
@@ -240,12 +240,15 @@ def main(args_eval, resume_preempt=False):
             'epoch': epoch,
             'batch_size': batch_size,
             'world_size': world_size,
-            'lr': lr
+            'lr': lr,
+            'val_acc': val_acc,
+            'test_acc': test_acc
         }
         if rank == 0:
             torch.save(save_dict, latest_path)
 
     # TRAIN LOOP
+    best_val_acc = 0
     for epoch in range(start_epoch, num_epochs):
         logger.info('Epoch %d' % (epoch + 1))
         train_acc = run_one_epoch(
@@ -287,7 +290,9 @@ def main(args_eval, resume_preempt=False):
         logger.info('[%5d] train: %.3f%% val: %.3f%% test: %.3f%%' % (epoch + 1, train_acc, val_acc, test_acc))
         if rank == 0:
             csv_logger.log(epoch + 1, train_acc, val_acc, test_acc)
-        save_checkpoint(epoch + 1)
+        if val_acc > best_val_acc:  
+            best_val_acc = val_acc
+            save_checkpoint(epoch + 1, val_acc, test_acc)
 
 
 def run_one_epoch(
